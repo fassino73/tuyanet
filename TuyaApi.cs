@@ -22,8 +22,9 @@ namespace com.clusterrr.TuyaNet
         private readonly string apiSecret;
         private readonly HttpClient httpClient;
         private TuyaToken token = null;
+        private string? RefreshToken { get; set; }
+
         private DateTime tokenTime = new DateTime();
-        public string TokenUid { get => token?.Uid;}
 
         private class TuyaToken
         {
@@ -198,15 +199,26 @@ namespace com.clusterrr.TuyaNet
         /// </summary>
         private async Task RefreshAccessTokenAsync(bool force = false, CancellationToken cancellationToken = default)
         {
-            if (force || (token == null) || (tokenTime.AddSeconds(token.ExpireTime) >= DateTime.Now)
-                // For some weird reason token expires sooner than it should
-                || (tokenTime.AddMinutes(30) >= DateTime.Now))
+            //https://developer.tuya.com/en/docs/cloud/oauth-management?id=K95ztzpoll7v5 
+
+            // For some weird reason token expires sooner than it should, so remove 60 secondes
+            if (! force && token != null && DateTime.Now < tokenTime.AddSeconds(token.ExpireTime - 60))
+                return;
+
+            string uri;
+            if(token == null || RefreshToken == null)
             {
-                var uri = "v1.0/token?grant_type=1";
-                var response = await RequestAsync(Method.GET, uri, noToken: true, cancellationToken: cancellationToken);
-                token = JsonConvert.DeserializeObject<TuyaToken>(response);
-                tokenTime = DateTime.Now;
+                uri = "v1.0/token?grant_type=1";
+            } 
+            else 
+            {
+                uri = $"v1.0/token/{RefreshToken}";
             }
+
+            var response = await RequestAsync(Method.GET, uri, noToken: true, cancellationToken: cancellationToken);
+            token = JsonConvert.DeserializeObject<TuyaToken>(response);
+            RefreshToken = token.RefreshToken;
+            tokenTime = DateTime.Now;
         }
 
         /// <summary>
